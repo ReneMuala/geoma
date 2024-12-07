@@ -1,11 +1,11 @@
 package org.descartes.geoma.engine;
 
 import lombok.Getter;
+import lombok.Setter;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 
+@Setter
 @Getter
 public class Navigator implements Cloneable {
     private final Target target;
@@ -13,6 +13,7 @@ public class Navigator implements Cloneable {
     private Marker marker;
     private Navigator predecessor = null;
     private List<Navigator> successors = new ArrayList<>();
+    private long successorsMaxBufferSize = 100;
 
     public Navigator(Marker marker, Target target, Model model) {
         this.marker = marker.clone();
@@ -21,13 +22,13 @@ public class Navigator implements Cloneable {
 
         Point closestTargetPoint;
         Point closestMarkerPoint;
-        double closestTargetPointDistance = Double.MAX_VALUE;
-        double closestMarkerPointDistance = Double.MAX_VALUE;
+        double closestTargetPointDistance;
+        double closestMarkerPointDistance;
 
         if(!model.shortPaths.isEmpty()){
-            closestTargetPoint = model.shortPaths.get(0).first;
+            closestTargetPoint = model.shortPaths.getFirst().first;
             closestTargetPointDistance = closestTargetPoint.distance(target.getOrigin());
-            closestMarkerPoint = model.shortPaths.get(0).first;
+            closestMarkerPoint = model.shortPaths.getFirst().first;
             closestMarkerPointDistance = closestMarkerPoint.distance(marker.getOrigin());
         } else {
             return;
@@ -35,27 +36,17 @@ public class Navigator implements Cloneable {
 
         for (Line line : this.model.shortPaths) {
             if(closestMarkerPointDistance != 0){
-                double distance = line.first.distance(marker.getOrigin());
+                double distance = line.distance(marker.getOrigin());
                 if(distance < closestMarkerPointDistance) {
-                    closestMarkerPoint = line.first;
-                    closestMarkerPointDistance = distance;
-                }
-                distance = line.second.distance(marker.getOrigin());
-                if(distance < closestMarkerPointDistance) {
-                    closestMarkerPoint = line.second;
+                    closestMarkerPoint = line.first.distance(marker.getOrigin()) > line.second.distance(marker.getOrigin()) ? line.second : line.first;
                     closestMarkerPointDistance = distance;
                 }
             }
 
             if(closestTargetPointDistance != 0){
-                double distance = line.first.distance(target.getOrigin());
+                double distance = line.distance(target.getOrigin());
                 if(distance < closestTargetPointDistance) {
-                    closestTargetPoint = line.first;
-                    closestTargetPointDistance = distance;
-                }
-                distance = line.second.distance(target.getOrigin());
-                if(distance < closestTargetPointDistance) {
-                    closestTargetPoint = line.second;
+                    closestTargetPoint = line.first.distance(target.getOrigin()) > line.second.distance(target.getOrigin()) ? line.second : line.first;
                     closestTargetPointDistance = distance;
                 }
             }
@@ -106,7 +97,59 @@ public class Navigator implements Cloneable {
         } return true;
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) return false;
+        Navigator navigator = (Navigator) o;
+        return marker.getOrigin().equals(navigator.getMarker().getOrigin());
+    }
+
+    @Override
+    public int hashCode() {
+        return marker.getOrigin().toString().hashCode();
+    }
+
+    private List<Navigator> getSuccessors(){
+        List<Navigator> result = new ArrayList<>();
+        List<Line> sps = model.getShortPaths().stream().filter(sp -> sp.first.equals(marker.getOrigin()) || sp.second.equals(marker.getOrigin())).toList();
+        for (Line sp : sps) {
+            Navigator successorCandidate = this.clone();
+            successorCandidate.marker.setOrigin(sp.first.equals(marker.getOrigin()) ? sp.second : sp.first);
+            if(successorCandidate.isUnique()){
+                result.add(successorCandidate);
+            }
+        }
+        return result;
+    }
+
     public List<Path> navigate(Counter counter) {
+        List<Path> paths = new ArrayList<>();
+        List<Navigator> navigators = new ArrayList<>();
+        navigators.add(this);
+
+        while(!counter.isDone()){
+            List<Navigator> nextNavigators = new ArrayList<>();
+            for(Navigator navigator : navigators.stream().toList()){
+                if(navigator.isOk()) {
+                    counter.count();
+                    paths.add(navigator.getPath());
+                    if(counter.isDone())
+                        return paths;
+                } else
+                    nextNavigators.addAll(navigator.getSuccessors());
+            }
+            navigators = nextNavigators
+                    .stream()
+                    .sorted(Comparator.comparingDouble(Navigator::getDistance))
+                    .limit(successorsMaxBufferSize)
+                    .toList();
+//            System.out.println("distance: " + navigators.get(0).getDistance() + " " + navigators.get(0).getMarker().getOrigin());
+        }
+        return paths;
+    }
+
+    @Deprecated(forRemoval = true)
+    public List<Path> navigateDeeply(Counter counter) {
         List<Path> paths = new ArrayList<>();
         if(counter.isDone()){
             return paths;
@@ -119,23 +162,18 @@ public class Navigator implements Cloneable {
             if (successorCandidate.isUnique()) {
                 successors.add(successorCandidate);
                 if(successorCandidate.isOk()){
-//                    System.out.println("Found: " + counter + " after " + successorCandidate.getSteps() + " steps");
                     counter.count();
                     paths.add(successorCandidate.getPath());
                     return paths;
                 }
-//                else {
-//                    paths.addAll(successorCandidate.navigate(counter));
-//                }
             }
         }
         successors.sort(Comparator.comparingDouble(Navigator::getDistance));
         if(!counter.isDone()){
             for (Navigator s : successors) {
-                paths.addAll(s.navigate(counter));
+                paths.addAll(s.navigateDeeply(counter));
             }
-        };
-//        successors.removeIf(successor -> !successor.navigate(requiredSolutions));
+        }
         return paths;
     }
 

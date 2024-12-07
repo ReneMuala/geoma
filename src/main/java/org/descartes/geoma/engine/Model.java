@@ -18,8 +18,10 @@ public class Model {
             }
         }
         final Set<Line> tempShortPaths = new HashSet<>();
-
-        for(Line line : shortPaths){
+        Iterator<Line> lineIterator = shortPaths.iterator();
+        while(lineIterator.hasNext()){
+            boolean hasInterception = false;
+            Line line = lineIterator.next();
             for(Line subLine : shortPaths){
                 if(line == subLine) continue;
                 Point interception = line.getInterceptionPoint(subLine);
@@ -36,6 +38,8 @@ public class Model {
                     C -----> B
                     C -----> D
                  */
+                if(!hasInterception)
+                    hasInterception = true;
                 tempShortPaths.add(new Line(line.first, interception));
                 tempShortPaths.add(new Line(interception, subLine.first));
 
@@ -48,7 +52,38 @@ public class Model {
                 tempShortPaths.add(new Line(line.second, interception));
                 tempShortPaths.add(new Line(interception, subLine.second));
             }
+            if(hasInterception) lineIterator.remove();
         }
+//        for(Line line : shortPaths){
+//            for(Line subLine : shortPaths){
+//                if(line == subLine) continue;
+//                Point interception = line.getInterceptionPoint(subLine);
+//                if(interception == null) continue;
+//               /*
+//                Given two lines
+//                A -----> C
+//                B -----> D
+//
+//
+//                if they collide, then we should infer:
+//                    A -----> B
+//                    A -----> D
+//                    C -----> B
+//                    C -----> D
+//                 */
+//                tempShortPaths.add(new Line(line.first, interception));
+//                tempShortPaths.add(new Line(interception, subLine.first));
+//
+//                tempShortPaths.add(new Line(line.first, interception));
+//                tempShortPaths.add(new Line(interception, subLine.second));
+//
+//                tempShortPaths.add(new Line(line.second, interception));
+//                tempShortPaths.add(new Line(interception, subLine.first));
+//
+//                tempShortPaths.add(new Line(line.second, interception));
+//                tempShortPaths.add(new Line(interception, subLine.second));
+//            }
+//        }*/
         shortPaths.addAll(tempShortPaths);
         Iterator<Line> item = shortPaths.iterator();
         while(item.hasNext()){

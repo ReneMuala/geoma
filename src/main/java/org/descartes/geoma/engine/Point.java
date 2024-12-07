@@ -34,10 +34,35 @@ public class Point implements Cloneable {
         );
     }
 
+    public Point times(double scalar) {
+        return new Point(
+                x * scalar,
+                y * scalar
+        );
+    }
+
+    public Point minus(Point other) {
+        return new Point(
+                x - other.x,
+                y - other.y
+        );
+    }
+
+    public Point abs(){
+        return new Point(Math.abs(x), Math.abs(y));
+    }
+
     public Point plus(double scalar) {
         return new Point(
                 x + scalar,
                 y + scalar
+        );
+    }
+
+    public Point plus(Point other) {
+        return new Point(
+                x + other.x,
+                y + other.y
         );
     }
 

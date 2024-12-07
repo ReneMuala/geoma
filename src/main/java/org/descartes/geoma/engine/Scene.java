@@ -24,23 +24,24 @@ import java.util.Map;
 public class Scene implements MeasurableBox, Drawable {
     private final List<Entity> entities = new ArrayList<>();
 
-    public List<Path> getPaths(){
+    public List<Path> getPaths() {
         return entities.stream()
                 .filter(e -> e instanceof Path)
-                .map(e -> (Path)e).toList();
+                .map(e -> (Path) e).toList();
     }
 
-    public List<Obstacle> getObstacles(){
+    public List<Obstacle> getObstacles() {
         return entities.stream()
                 .filter(e -> e instanceof Obstacle)
-                .map(e -> (Obstacle)e).toList();
+                .map(e -> (Obstacle) e).toList();
     }
 
-    public void drawPNG()  {
+    @Deprecated(forRemoval = true)
+    public void drawPNG() {
         final Point bottomRight = getBottomRight();
         final int padding = 0;
-        final int paddedWidth = (int)bottomRight.getX() + padding * 2;
-        final int paddedHeight = (int)bottomRight.getY() + padding * 2;
+        final int paddedWidth = (int) bottomRight.getX() + padding * 2;
+        final int paddedHeight = (int) bottomRight.getY() + padding * 2;
         BufferedImage image = new BufferedImage(paddedWidth, paddedHeight, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = image.createGraphics();
         g.setBackground(Color.BLACK);
@@ -50,26 +51,27 @@ public class Scene implements MeasurableBox, Drawable {
 
         try {
             ImageIO.write(image, "png", new File("GeoMa.png"));
-        } catch (IOException e){
-            e.printStackTrace();
+        } catch (IOException e) {
+            System.err.println(e.getMessage());
         }
     }
 
-    public void drawSVG() {
-        final Point bottomRight = getBottomRight();
-        final int padding = 10;
-        final int paddedWidth = (int)bottomRight.getX() + padding * 2;
-        final int paddedHeight = (int)bottomRight.getY() + padding * 2;
-        SVGGraphics2D g = new SVGGraphics2D(paddedWidth, paddedHeight);
-        g.setBackground(Color.BLACK);
-        g.clearRect(0, 0, paddedWidth, paddedHeight);
-        g.translate(padding, padding);
-        draw(g);
+    public void drawSVG(double deg) {
         try {
+            final Point bottomRight = getBottomRight();
+            final int padding = 10;
+            final int paddedWidth = (int) bottomRight.getX() + padding * 2;
+            final int paddedHeight = (int) bottomRight.getY() + padding * 2;
+            SVGGraphics2D g = new SVGGraphics2D(paddedWidth, paddedHeight);
+            g.setBackground(new Color(240, 240, 240, 255));
+            g.clearRect(0, 0, paddedWidth, paddedHeight);
+            g.rotate(deg * Math.PI / 180, (double) paddedWidth / 2, (double) paddedHeight / 2);
+            g.translate(padding, padding);
+            draw(g);
             PrintStream printStream = new PrintStream(new FileOutputStream("GeoMa.svg"));
             printStream.print(g.getSVGDocument());
         } catch (FileNotFoundException e) {
-            throw new RuntimeException(e);
+            System.err.println(e.getMessage());
         }
     }
 
@@ -79,11 +81,11 @@ public class Scene implements MeasurableBox, Drawable {
 
     public void printEntities() {
         for (Entity entity : entities) {
-            if(entity instanceof Path) {
+            if (entity instanceof Path) {
                 System.out.println("Path: " + entity);
-            } else if(entity instanceof Obstacle) {
+            } else if (entity instanceof Obstacle) {
                 System.out.println("Obstacle: " + entity);
-            } else if(entity instanceof Location) {
+            } else if (entity instanceof Location) {
                 System.out.println("Location: " + entity);
             }
         }
@@ -91,13 +93,13 @@ public class Scene implements MeasurableBox, Drawable {
 
     @Override
     public Point getTopLeft() {
-        return new Point(0,0);
+        return new Point(0, 0);
     }
 
     @Override
     public Point getBottomRight() {
-        Point bottomRight =  entities.isEmpty() ? null : entities.get(0).getBottomRight().clone();
-        for(Entity entity : entities.stream().skip(1).toList()){
+        Point bottomRight = entities.isEmpty() ? null : entities.getFirst().getBottomRight().clone();
+        for (Entity entity : entities.stream().skip(1).toList()) {
             Point point = entity.getBottomRight();
             if (point.isGreaterX(bottomRight))
                 bottomRight.setX(point.getX());
@@ -109,12 +111,12 @@ public class Scene implements MeasurableBox, Drawable {
 
     @Override
     public void draw(Graphics2D g) {
-        for(Entity entity : entities){
+        for (Entity entity : entities) {
             entity.draw(g);
         }
     }
 
-    public int addOSM(File fXmlFile, String wayNamePattern, double xoffset, double yoffset, double zoom) {
+    public int addOSM(File fXmlFile, PathValidator validator, double xoffset, double yoffset, double zoom) {
         Map<String, Point> points = new HashMap<>();
         List<Path> paths = new ArrayList<>();
 
@@ -124,39 +126,46 @@ public class Scene implements MeasurableBox, Drawable {
             final Document doc = dBuilder.parse(fXmlFile);
             doc.getDocumentElement().normalize();
             Element root = doc.getDocumentElement();
-            System.out.println(root.getNodeName());
             NodeList children = root.getChildNodes();
-            for(int i = 0 ; i < children.getLength(); i++){
+            for (int i = 0; i < children.getLength(); i++) {
                 Node child = children.item(i);
-                if(child.getNodeName().equals("node")){
-                    Point point = new Point(
-                            zoom * (xoffset + Math.abs(Double.parseDouble(child.getAttributes().getNamedItem("lat").getTextContent()))),
-                            zoom * (yoffset + Math.abs(Double.parseDouble(child.getAttributes().getNamedItem("lon").getTextContent()))));
-                    points.put(
-                            child.getAttributes().getNamedItem("id").getTextContent(),
-                            point);
-                } else if(child.getNodeName().equals("way")){
-                    NodeList wayChildren = child.getChildNodes();
-
-                    Path path = new Path();
-                    String routeName = "";
-                    for(int j = 0 ; j < wayChildren.getLength(); j++){
-                        Node wayChild = wayChildren.item(j);
-                        if(wayChild.getNodeName().equals("nd")){
-                            Point subPoint = points.get(wayChild.getAttributes().getNamedItem("ref").getTextContent());
-                            System.out.println(subPoint);
-                            path.addPoint(subPoint);
-                        } else if(wayChild.getNodeName().equals("tag") && wayChild.getAttributes().getNamedItem("k").getTextContent().equals("name")) {
-                            routeName = wayChild.getAttributes().getNamedItem("v").getTextContent();
-                        }
+                switch (child.getNodeName()) {
+                    case "node" -> {
+                        Point point = new Point(
+                                zoom * ((xoffset + Double.parseDouble(child.getAttributes().getNamedItem("lat").getTextContent()))),
+                                zoom * ((yoffset + Double.parseDouble(child.getAttributes().getNamedItem("lon").getTextContent()))));
+                        points.put(
+                                child.getAttributes().getNamedItem("id").getTextContent(),
+                                point);
                     }
-                    if(wayNamePattern == null || routeName.matches(wayNamePattern)){
-                        paths.add(path);
+                    case "way" -> {
+                        NodeList wayChildren = child.getChildNodes();
+                        Map<String, String> tags = new HashMap<>();
+                        Path path = new Path();
+                        for (int j = 0; j < wayChildren.getLength(); j++) {
+                            Node wayChild = wayChildren.item(j);
+                            switch (wayChild.getNodeName()) {
+                                case "nd" -> {
+                                    Point subPoint = points.get(wayChild.getAttributes().getNamedItem("ref").getTextContent());
+                                    path.addPoint(subPoint);
+                                }
+                                case "tag" ->
+                                        tags.put(wayChild.getAttributes().getNamedItem("k").getTextContent(), wayChild.getAttributes().getNamedItem("v").getTextContent());
+                            }
+                        }
+                        if (validator.validate(tags)) paths.add(path);
+                    }
+                    case "bounds" -> {
+                        if (xoffset == 0)
+                            xoffset = -Double.parseDouble(child.getAttributes().getNamedItem("minlat").getTextContent());
+                        if (yoffset == 0)
+                            yoffset = -Double.parseDouble(child.getAttributes().getNamedItem("minlon").getTextContent());
+                        System.out.println(fXmlFile.getName() + " [min-bounds] " + new Point(xoffset, yoffset).times(-1));
                     }
                 }
             }
-        } catch (Exception e){
-            e.printStackTrace();
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
             return 0;
         }
         this.entities.addAll(paths);

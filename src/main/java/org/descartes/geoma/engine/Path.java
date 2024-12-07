@@ -34,7 +34,7 @@ public class Path extends Entity {
 
     @Override
     public Point getTopLeft() {
-        Point topLeft = points.isEmpty() ? null : points.get(0).clone();
+        Point topLeft = points.isEmpty() ? null : points.getFirst().clone();
 
         for (Point point : points.stream().skip(1).toList()) {
             if (point.isLessX(topLeft))
@@ -47,7 +47,7 @@ public class Path extends Entity {
 
     @Override
     public Point getBottomRight() {
-        Point bottomRight = points.isEmpty() ? null : points.get(0).clone();
+        Point bottomRight = points.isEmpty() ? null : points.getFirst().clone();
 
         for (Point point : points) {
             if (point.isGreaterX(bottomRight))
@@ -60,7 +60,7 @@ public class Path extends Entity {
 
     @Override
     public void draw(Graphics2D g) {
-        g.setColor(isSolution ? Color.blue : Color.WHITE);
+        g.setColor(isSolution ? Color.blue : new Color(10,10,10));
         for(int i = 0; i < points.size() - 1; i++) {
             Point start = points.get(i);
             Point end = points.get(i + 1);
